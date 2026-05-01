@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>リズムでもぐらたたき！</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=M+PLUS+Rounded+1c:wght@700;900&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --orange: #ff8c00;
+    --orange-dark: #cc6600;
+    --blue: #1a5fa8;
+    --green: #1a9a60;
+    --red: #cc2222;
+    --gold: #ffcc00;
+    --font: 'M PLUS Rounded 1c', 'Nunito', sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: #0a0520;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 16px;
+    color: white;
+  }
+
+  #app {
+    width: 100%;
+    max-width: 480px;
+    height: 750px;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    position: relative;
+    background: #1a0a2e;
+  }
+
+  /* 背景演出 */
+  #bg-wall {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, #0d0520 0%, #1a0a2e 70%, #221008 100%);
+    z-index: 0;
+  }
+
+  /* HUD (スコア表示) */
+  #hud {
+    position: relative; z-index: 10;
+    display: flex; justify-content: space-between;
+    padding: 15px;
+    gap: 8px;
+  }
+  .hud-box {
+    background: rgba(0,0,0,0.6);
+    border: 2px solid #ff44aa;
+    border-radius: 12px;
+    padding: 5px 15px;
+    text-align: center;
+    flex: 1;
+  }
+  .hud-label { font-size: 10px; color: #ff88cc; }
+  .hud-val { font-size: 20px; color: #ffee44; font-family: monospace; }
+
+  /* 判定テキスト */
+  #judge {
+    height: 50px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    z-index: 10;
+  }
+  #judge-text {
+    font-size: 30px;
+    font-weight: 900;
+    transform: scale(0);
+    transition: transform 0.1s;
+  }
+  #judge-text.show { transform: scale(1.2); }
+  .perfect { color: var(--gold); text-shadow: 0 0 10px var(--orange); }
+  .good { color: #44ffaa; }
+  .miss { color: var(--red); }
+
+  /* ゲームボード */
+  #board {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    padding: 20px;
+    position: relative;
+    z-index: 10;
+  }
+  .hole-btn {
+    aspect-ratio: 1;
+    background: radial-gradient(circle at 50% 100%, #3a1a08, #0a0318);
+    border: 4px solid #1a0a38;
+    border-radius: 50%;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+    box-shadow: 0 8px 0 #000;
+  }
+  .hole-btn:active { transform: translateY(4px); box-shadow: 0 4px 0 #000; }
+
+  .mole {
+    font-size: 60px;
+    position: absolute;
+    bottom: -80px;
+    left: 0; right: 0;
+    text-align: center;
+    transition: bottom 0.15s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    user-select: none;
+  }
+  .hole-btn.active .mole { bottom: 10px; }
+
+  /* タイミングバー */
+  #timing-area {
+    padding: 0 20px;
+    position: relative;
+    z-index: 10;
+  }
+  #timing-track {
+    height: 12px;
+    background: linear-gradient(to right, #f00, #ff0, #0f0, #ff0, #f00);
+    border-radius: 6px;
+    position: relative;
+  }
+  #timing-marker {
+    position: absolute;
+    top: -4px; width: 20px; height: 20px;
+    background: white; border: 3px solid #333;
+    border-radius: 50%;
+    transform: translateX(-50%);
+    left: 0%; /* JSで動かす */
+  }
+
+  /* オーバーレイ */
+  .overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  .big-btn {
+    background: var(--orange);
+    color: white; border: none;
+    padding: 15px 40px;
+    font-size: 24px;
+    border-radius: 50px;
+    cursor: pointer;
+    margin-top: 20px;
+    font-family: inherit;
+    font-weight: 900;
+    box-shadow: 0 5px 0 var(--orange-dark);
+  }
+  .big-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--orange-dark); }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="bg-wall"></div>
+  
+  <div id="hud">
+    <div class="hud-box">
+      <div class="hud-label">SCORE</div>
+      <div id="score" class="hud-val">00000</div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">COMBO</div>
+      <div id="combo" class="hud-val">0</div>
+    </div>
+  </div>
+
+  <div id="judge"><div id="judge-text"></div></div>
+
+  <div id="board">
+    <div class="hole-btn" onclick="hit(0)"><div class="mole" id="mole0">🐭</div></div>
+    <div class="hole-btn" onclick="hit(1)"><div class="mole" id="mole1">🐭</div></div>
+    <div class="hole-btn" onclick="hit(2)"><div class="mole" id="mole2">🐭</div></div>
+    <div class="hole-btn" onclick="hit(3)"><div class="mole" id="mole3">🐭</div></div>
+  </div>
+
+  <div id="timing-area">
+    <p style="text-align: center; font-size: 12px; margin-bottom: 5px;">中央で叩け！</p>
+    <div id="timing-track">
+      <div id="timing-marker"></div>
+    </div>
+  </div>
+
+  <!-- スタート画面 -->
+  <div id="start-screen" class="overlay">
+    <h1 style="color: #ffee44; font-size: 32px;">リズムもぐらたたき</h1>
+    <p>音楽に合わせて<br>飛び出すネズミを叩こう！</p>
+    <button class="big-btn" onclick="initGame()">スタート！</button>
+  </div>
+
+  <!-- リザルト画面 -->
+  <div id="result-screen" class="overlay" style="display: none;">
+    <h1 style="color: #ff44aa;">FINISH!</h1>
+    <div id="final-score" style="font-size: 40px; margin: 10px 0;">0</div>
+    <p id="stats"></p>
+    <button class="big-btn" onclick="location.reload()">もう一度</button>
+  </div>
+</div>
+
+<script>
+/**
+ * ゲーム設定
+ */
+const BPM = 120;
+const BEAT_MS = 60000 / BPM; // 1拍 500ms
+const GAME_DURATION = 30000; // 30秒
+
+let score = 0;
+let combo = 0;
+let counts = { perfect: 0, good: 0, miss: 0 };
+let gameActive = false;
+let startTime = 0;
+let activeMole = -1;
+let moleTargetTime = 0; // そのもぐらを叩くべき理想の時間
+
+const judgeText = document.getElementById('judge-text');
+const marker = document.getElementById('timing-marker');
+
+/**
+ * ゲーム開始
+ */
+function initGame() {
+  document.getElementById('start-screen').style.display = 'none';
+  gameActive = true;
+  score = 0;
+  combo = 0;
+  startTime = performance.now();
+  
+  // もぐら出現ループ
+  spawnLoop();
+  // アニメーションループ（タイミングバー用）
+  requestAnimationFrame(update);
+
+  // 終了タイマー
+  setTimeout(endGame, GAME_DURATION);
+}
+
+/**
+ * もぐら出現ロジック
+ */
+function spawnLoop() {
+  if (!gameActive) return;
+
+  // 全てのもぐらを一度引っ込める
+  const holes = document.querySelectorAll('.hole-btn');
+  holes.forEach(h => h.classList.remove('active'));
+
+  // ランダムな穴から出現
+  const nextHole = Math.floor(Math.random() * 4);
+  activeMole = nextHole;
+  moleTargetTime = performance.now() + BEAT_MS; // 次の拍で叩くのが理想
+  
+  holes[nextHole].classList.add('active');
+
+  // 次の出現を予約（拍に合わせる）
+  setTimeout(spawnLoop, BEAT_MS);
+}
+
+/**
+ * 叩いた時の判定
+ */
+function hit(holeIdx) {
+  if (!gameActive || activeMole === -1) return;
+
+  const now = performance.now();
+  const diff = Math.abs(now - moleTargetTime);
+  const holeElement = document.querySelectorAll('.hole-btn')[holeIdx];
+
+  // 正しい穴を叩いたか？
+  if (holeIdx === activeMole && holeElement.classList.contains('active')) {
+    holeElement.classList.remove('active');
+    activeMole = -1;
+
+    // 判定計算
+    if (diff < 80) {
+      showJudge('PERFECT!', 'perfect');
+      addScore(500);
+      counts.perfect++;
+    } else if (diff < 200) {
+      showJudge('GOOD', 'good');
+      addScore(200);
+      counts.good++;
+    } else {
+      showJudge('MISS', 'miss');
+      resetCombo();
+      counts.miss++;
+    }
+  } else {
+    // お手付き
+    showJudge('MISS', 'miss');
+    resetCombo();
+    counts.miss++;
+  }
+}
+
+/**
+ * 演出・更新系
+ */
+function update(time) {
+  if (!gameActive) return;
+
+  // タイミングバーのマーカー移動 (0% -> 100% を1拍で繰り返す)
+  const elapsed = time - startTime;
+  const progress = (elapsed % BEAT_MS) / BEAT_MS;
+  marker.style.left = (progress * 100) + "%";
+
+  requestAnimationFrame(update);
+}
+
+function showJudge(text, className) {
+  judgeText.innerText = text;
+  judgeText.className = className + ' show';
+  setTimeout(() => judgeText.classList.remove('show'), 200);
+}
+
+function addScore(points) {
+  combo++;
+  score += points + (combo * 10);
+  document.getElementById('score').innerText = score.toString().padStart(5, '0');
+  document.getElementById('combo').innerText = combo;
+}
+
+function resetCombo() {
+  combo = 0;
+  document.getElementById('combo').innerText = combo;
+}
+
+function endGame() {
+  gameActive = false;
+  document.getElementById('result-screen').style.display = 'flex';
+  document.getElementById('final-score').innerText = "SCORE: " + score;
+  document.getElementById('stats').innerHTML = `
+    Perfect: ${counts.perfect}<br>
+    Good: ${counts.good}<br>
+    Miss: ${counts.miss}
+  `;
+}
+</script>
+</body>
+</html>
